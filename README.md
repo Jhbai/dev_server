@@ -1,73 +1,64 @@
-# Web IDE Backend API
+# Web IDE 後端服務
 
-這是一個基於 FastAPI 構建的 Web IDE 後端服務，提供文件管理、代碼編輯和命令執行等功能。
+這是一個基於 **FastAPI** 構建的 Web IDE 後端服務，提供文件管理、目錄瀏覽和命令執行等功能，並內建一個簡單的前端 GUI 介面。
 
-## 功能特點
+---
 
-- 📁 文件和目錄管理（列出、讀取、寫入、創建、刪除）
-- 💻 內建 Web 界面進行代碼編輯
-- 💾 執行 Shell 命令並查看輸出
-- 🎨 類似 VS Code 的深色主題界面
+## 📋 功能特點
 
-## 依賴套件
+- **文件管理**：讀取、寫入、創建、刪除文件和目錄
+- **目錄瀏覽**：列出目錄內容，支援導航
+- **命令執行**：在伺服器上執行 Shell 命令
+- **內建 GUI**：提供類似 VS Code 的網頁介面
+- **基本認證**：使用 HTTP Basic Authentication 進行安全驗證
 
-請確保已安裝以下套件：
+---
+
+## 🚀 啟動方法
+
+### 1. 安裝依賴
 
 ```bash
 pip install -r requirements.txt
 ```
 
-或手動安裝：
+### 2. 設定環境變數（可選）
+
+預設用戶名和密碼為 `admin` / `password123`，可以透過環境變數自訂：
 
 ```bash
-pip install fastapi uvicorn pydantic
+export IDE_USERNAME="your_username"
+export IDE_PASSWORD="your_password"
 ```
 
-## 啟動方法
-
-### 方式一：直接運行
+### 3. 啟動服務
 
 ```bash
 python main.py
 ```
 
-### 方式二：使用 uvicorn 命令
+服務預設啟動在 `http://127.0.0.1:8000`
 
-```bash
-uvicorn main:app --host 127.0.0.1 --port 8000
-```
+---
 
-服務啟動後，可以訪問以下地址：
+## 📡 API 端點介紹
 
-- **Web IDE 界面**: http://127.0.0.1:8000/docs/gui
-- **API 文檔**: http://127.0.0.1:8000/docs
-
-## API 端點說明
+所有 API 端點都需要 **HTTP Basic Authentication** 認證。
 
 ### 1. 列出目錄內容
 
-**端點**: `GET /api/list`
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/list` | 列出指定路徑下的所有文件和目錄 |
 
-**功能**: 列出指定目錄中的所有文件和子目錄
+**查詢參數：**
+- `path` (string, 預設 "."): 要列出的目錄路徑
 
-**參數**:
-| 參數名稱 | 類型 | 必填 | 預設值 | 說明 |
-|---------|------|------|--------|------|
-| path | string | 否 | "." | 要列出的目錄路徑 |
-
-**回應範例**:
+**回應範例：**
 ```json
 [
-  {
-    "name": "src",
-    "is_dir": true,
-    "path": "./src"
-  },
-  {
-    "name": "main.py",
-    "is_dir": false,
-    "path": "./main.py"
-  }
+  {"name": "src", "is_dir": true, "path": "/path/to/src"},
+  {"name": "main.py", "is_dir": false, "path": "/path/to/main.py"}
 ]
 ```
 
@@ -75,19 +66,17 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 
 ### 2. 讀取文件
 
-**端點**: `GET /api/read`
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/read` | 讀取指定文件的內容 |
 
-**功能**: 讀取指定文件的內容
+**查詢參數：**
+- `path` (string, 必填): 要讀取的文件路徑
 
-**參數**:
-| 參數名稱 | 類型 | 必填 | 說明 |
-|---------|------|------|------|
-| path | string | 是 | 要讀取的文件路徑 |
-
-**回應範例**:
+**回應範例：**
 ```json
 {
-  "content": "print('Hello, World!')"
+  "content": "文件內容..."
 }
 ```
 
@@ -95,85 +84,68 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 
 ### 3. 寫入文件
 
-**端點**: `POST /api/write`
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| POST | `/api/write` | 寫入內容到指定文件 |
 
-**功能**: 創建或覆蓋指定文件
-
-**請求體**:
+**請求體 (JSON)：**
 ```json
 {
-  "path": "example.txt",
-  "content": "這是文件內容"
+  "path": "/path/to/file.txt",
+  "content": "要寫入的內容"
 }
 ```
 
-| 欄位名稱 | 類型 | 必填 | 預設值 | 說明 |
-|---------|------|------|--------|------|
-| path | string | 是 | - | 文件路徑 |
-| content | string | 否 | "" | 文件內容 |
-
-**回應範例**:
+**回應範例：**
 ```json
-{
-  "status": "success"
-}
+{"status": "success"}
 ```
 
 ---
 
 ### 4. 創建目錄
 
-**端點**: `POST /api/create_dir`
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| POST | `/api/create_dir` | 創建新的目錄 |
 
-**功能**: 創建指定路徑的目錄（包含父目錄）
-
-**請求體**:
+**請求體 (JSON)：**
 ```json
 {
-  "path": "new_folder/subfolder"
+  "path": "/path/to/new_directory"
 }
 ```
 
-| 欄位名稱 | 類型 | 必填 | 說明 |
-|---------|------|------|------|
-| path | string | 是 | 要創建的目錄路徑 |
-
-**回應範例**:
+**回應範例：**
 ```json
-{
-  "status": "success"
-}
+{"status": "success"}
 ```
 
 ---
 
 ### 5. 刪除文件或目錄
 
-**端點**: `DELETE /api/delete`
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| DELETE | `/api/delete` | 刪除指定的文件或目錄 |
 
-**功能**: 刪除指定的文件或目錄（目錄會递归刪除）
+**查詢參數：**
+- `path` (string, 必填): 要刪除的文件或目錄路徑
 
-**參數**:
-| 參數名稱 | 類型 | 必填 | 說明 |
-|---------|------|------|------|
-| path | string | 是 | 要刪除的文件或目錄路徑 |
-
-**回應範例**:
+**回應範例：**
 ```json
-{
-  "status": "success"
-}
+{"status": "success"}
 ```
 
 ---
 
-### 6. 執行命令
+### 6. 執行 Shell 命令
 
-**端點**: `POST /api/cmd`
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| POST | `/api/cmd` | 在伺服器上執行 Shell 命令 |
 
-**功能**: 在指定目錄中執行 Shell 命令
-
-**請求體**:
+**請求體 (JSON)：**
 ```json
 {
   "command": "ls -la",
@@ -181,53 +153,83 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 }
 ```
 
-| 欄位名稱 | 類型 | 必填 | 預設值 | 說明 |
-|---------|------|------|--------|------|
-| command | string | 是 | - | 要執行的命令 |
-| cwd | string | 否 | "." | 命令執行的工作目錄 |
+**參數說明：**
+- `command` (string, 必填): 要執行的命令
+- `cwd` (string, 預設 "."): 命令執行的工作目錄
 
-**回應範例**:
+**回應範例：**
 ```json
 {
-  "stdout": "total 20\ndrwxr-xr-x 2 user user 4096 Jan 1 00:00 .\n",
-  "stderr": "",
+  "stdout": "命令標準輸出",
+  "stderr": "命令錯誤輸出",
   "returncode": 0
 }
 ```
 
 ---
 
-### 7. 獲取 Web GUI
+### 7. 內建 GUI 介面
 
-**端點**: `GET /docs/gui`
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/docs/gui` | 訪問內建的 Web IDE 圖形介面 |
 
-**功能**: 返回內建的 Web IDE 界面（HTML + JavaScript）
+這個端點提供一個類似 VS Code 的網頁介面，包含：
+- 左側檔案瀏覽器
+- 中央程式碼編輯器
+- 底部終端機
 
-**回應**: 完整的 HTML 頁面，包含：
-- 文件瀏覽器（側邊欄）
-- 代碼編輯器（主區域）
-- 終端模擬器（底部）
+---
 
-## 使用 Web IDE 界面
+### 8. API 文件
 
-1. 啟動服務後，訪問 http://127.0.0.1:8000/docs/gui
-2. **雙擊文件**：在側邊欄雙擊文件以打開編輯
-3. **雙擊文件夾**：進入該目錄
-4. **創建檔案/資料夾**：點擊對應按鈕
-5. **儲存檔案**：編輯後點擊「儲存當前檔案」按鈕
-6. **終端**：在底部輸入框輸入命令並按 Enter 執行
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/docs` | FastAPI 自動生成的 API 文件（需要認證） |
 
-## 安全注意事項
+---
 
-⚠️ **警告**: 此服務包含執行任意命令的功能，請僅在可信賴的環境中使用。
+## 🔐 認證方式
 
-- 避免在公共網絡上暴露此服務
-- 執行命令的功能可能帶來安全風險
-- 建議搭配身份驗證機制使用
+所有 API 端點都使用 **HTTP Basic Authentication**。
 
-## 技術棧
+### cURL 範例：
+```bash
+curl -u admin:password123 http://127.0.0.1:8000/api/list?path=.
+```
 
-- **框架**: FastAPI
+### JavaScript Fetch 範例：
+```javascript
+fetch('/api/list?path=.', {
+  headers: {
+    'Authorization': 'Basic ' + btoa('admin:password123')
+  }
+});
+```
+
+---
+
+## 📦 依賴項目
+
+- **FastAPI** >= 0.104.0 - Web 框架
+- **Uvicorn** >= 0.24.0 - ASGI 伺服器
+- **Pydantic** >= 2.0.0 - 數據驗證
+
+---
+
+## ⚠️ 安全注意事項
+
+1. 生產環境中請務必修改預設的用戶名和密碼
+2. 建議使用環境變數儲存認證資訊
+3. 考慮使用 HTTPS 加密傳輸
+4. 命令執行功能具有潛在風險，請謹慎使用
+
+---
+
+## 🛠️ 技術棧
+
+- **後端框架**: FastAPI
 - **伺服器**: Uvicorn
 - **數據驗證**: Pydantic
+- **認證**: HTTP Basic Authentication
 - **前端**: 原生 HTML/CSS/JavaScript
