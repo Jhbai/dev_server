@@ -1,14 +1,18 @@
+import asyncio
+import json
+import random
 import os
 import subprocess
 import shutil
-from fastapi import FastAPI, HTTPException, Depends, Security
+from datetime import datetime, timedelta
+from fastapi import FastAPI, Query, HTTPException, Depends, Security
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 import uvicorn
 
 # 初始化 FastAPI 應用
-app = FastAPI(title="Web IDE API")
+app = FastAPI(title="Integrated Data Service")
 
 # HTTP Basic 認證設定
 security = HTTPBasic()
@@ -41,8 +45,8 @@ class CmdRequest(BaseModel):
     cwd: str = "."
 
 
-# --- API 端點實作 ---
-@app.get("/api/list")
+# --- Web IDE API 端點實作 ---
+@app.get("/api/list", tags=["system"])
 def list_files(path: str = ".", user: str = Depends(verify_credentials)):
     """列出目錄內容"""
     if not os.path.exists(path):
@@ -62,7 +66,7 @@ def list_files(path: str = ".", user: str = Depends(verify_credentials)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/read")
+@app.get("/api/read", tags=["system"])
 def read_file(path: str, user: str = Depends(verify_credentials)):
     """讀取文件內容"""
     if not os.path.isfile(path):
@@ -74,7 +78,7 @@ def read_file(path: str, user: str = Depends(verify_credentials)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/write")
+@app.post("/api/write", tags=["system"])
 def write_file(req: FileRequest, user: str = Depends(verify_credentials)):
     """寫入文件內容"""
     try:
@@ -85,7 +89,7 @@ def write_file(req: FileRequest, user: str = Depends(verify_credentials)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/create_dir")
+@app.post("/api/create_dir", tags=["system"])
 def create_dir(req: FileRequest, user: str = Depends(verify_credentials)):
     """創建目錄"""
     try:
@@ -95,7 +99,7 @@ def create_dir(req: FileRequest, user: str = Depends(verify_credentials)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.delete("/api/delete")
+@app.delete("/api/delete", tags=["system"])
 def delete_file(path: str, user: str = Depends(verify_credentials)):
     """刪除文件或目錄"""
     try:
@@ -108,7 +112,7 @@ def delete_file(path: str, user: str = Depends(verify_credentials)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/cmd")
+@app.post("/api/cmd", tags=["system"])
 def run_cmd(req: CmdRequest, user: str = Depends(verify_credentials)):
     """執行 Shell 命令"""
     try:
@@ -417,6 +421,246 @@ def get_gui():
 """
     return html_content
 
+
+# --- 數據流圖表功能 ---
+# HTML 與 JavaScript 前端整合碼
+chart_html_content = """
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>Time Series Stream Chart</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            background-attachment: fixed;
+            color: #e0e0e0;
+            min-height: 100vh;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: rgba(30, 30, 46, 0.8);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #64b5f6;
+            margin-top: 0;
+            text-shadow: 0 0 10px rgba(100, 181, 246, 0.3);
+            font-weight: 300;
+        }
+        
+        .controls { 
+            margin-bottom: 25px; 
+            display: flex; 
+            gap: 15px; 
+            flex-wrap: wrap;
+            background: rgba(25, 25, 35, 0.7);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(100, 181, 246, 0.2);
+        }
+        
+        input { 
+            padding: 10px 15px; 
+            width: 220px; 
+            border: 1px solid #4a4a6a;
+            border-radius: 8px;
+            background-color: #1e1e2e;
+            color: #e0e0e0;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #64b5f6;
+            box-shadow: 0 0 8px rgba(100, 181, 246, 0.4);
+        }
+        
+        button { 
+            padding: 10px 20px; 
+            cursor: pointer;
+            background: linear-gradient(135deg, #64b5f6 0%, #2196f3 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(33, 150, 243, 0.2);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(33, 150, 243, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .chart-box { 
+            width: 100%; 
+            max-width: 100%; 
+            height: 500px; 
+            border: 1px solid rgba(100, 181, 246, 0.3);
+            padding: 15px; 
+            border-radius: 12px;
+            background-color: rgba(25, 25, 35, 0.7);
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <input type="text" id="dataNames" placeholder="dataName (ex: A,B,C)" value="Sensor1,Sensor2">
+        <input type="text" id="start" placeholder="YYYY-MM-DD HH:MM:SS" value="2026-03-15 00:00:00">
+        <input type="text" id="end" placeholder="YYYY-MM-DD HH:MM:SS" value="2026-03-15 05:00:00">
+        <button onclick="startStream()">開始繪圖</button>
+    </div>
+    
+    <div class="chart-box">
+        <canvas id="myChart"></canvas>
+    </div>
+
+    <script>
+        let chart;
+        const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
+
+        async function startStream() {
+            const dataNames = document.getElementById('dataNames').value;
+            const start = document.getElementById('start').value;
+            const end = document.getElementById('end').value;
+            
+            // 初始化或重置圖表
+            if(chart) chart.destroy();
+            const ctx = document.getElementById('myChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: { 
+                    animation: false, // 關閉動畫以利串流效能
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+
+            const datasetMap = {};
+            let colorIdx = 0;
+
+            const url = `/api/data?dataNames=${encodeURIComponent(dataNames)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+            
+            try {
+                const response = await fetch(url);
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = "";
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const parts = buffer.split('\\n');
+                    buffer = parts.pop(); // 保留不完整的 JSON 字串等待下一次讀取
+
+                    let timeSet = new Set(chart.data.labels);
+
+                    for (const part of parts) {
+                        if (!part.trim()) continue;
+                        const dataBatch = JSON.parse(part);
+                        
+                        dataBatch.forEach(point => {
+                            // 處理 X 軸時間標籤
+                            if (!timeSet.has(point.dateTime)) {
+                                chart.data.labels.push(point.dateTime);
+                                timeSet.add(point.dateTime);
+                            }
+                            
+                            // 處理 Y 軸資料集
+                            if (!datasetMap[point.dataName]) {
+                                datasetMap[point.dataName] = {
+                                    label: point.dataName,
+                                    data: [],
+                                    borderColor: colors[colorIdx++ % colors.length],
+                                    fill: false,
+                                    tension: 0.1
+                                };
+                                chart.data.datasets.push(datasetMap[point.dataName]);
+                            }
+                            datasetMap[point.dataName].data.push(point.value);
+                        });
+                    }
+                    chart.update(); // 每一批資料載入後更新一次圖表
+                }
+            } catch (e) {
+                console.error("Stream error:", e);
+            }
+        }
+    </script>
+</body>
+</html>
+"""
+
+@app.get("/docs/chart", response_class=HTMLResponse)
+async def get_chart_page(user: str = Depends(verify_credentials)):
+    return chart_html_content
+
+async def data_generator(data_names: list, start_dt: datetime, end_dt: datetime):
+    current_dt = start_dt
+    while current_dt < end_dt:
+        batch = []
+        # 一次生成一小時 (60個點) 的資料
+        for i in range(60):
+            point_time = current_dt + timedelta(minutes=i)
+            if point_time >= end_dt:
+                break
+            for name in data_names:
+                batch.append({
+                    "dataName": name,
+                    "value": round(random.uniform(10, 100), 2),  # 模擬真實數值
+                    "dateTime": point_time.strftime("%Y-%m-%d %H:%M:%S")
+                })
+        
+        # 轉為 JSON 字串並加上換行符號 (NDJSON 格式)
+        yield json.dumps(batch) + "\n"
+        
+        current_dt += timedelta(hours=1)
+        # 模擬 I/O 延遲，讓前端肉眼能看出逐步畫圖的效果
+        await asyncio.sleep(0.5)
+
+@app.get("/api/data", tags=["system"])
+async def stream_data(
+    dataNames: str = Query(..., description="以逗號分隔的 dataName"),
+    start: str = Query(..., description="起始時間 YYYY-MM-DD HH:MM:SS"),
+    end: str = Query(..., description="結束時間 YYYY-MM-DD HH:MM:SS"),
+    user: str = Depends(verify_credentials)
+):
+    names_list = [name.strip() for name in dataNames.split(",")]
+    start_dt = datetime.strptime(start, "%Y-%m-%d %H:%M:%S")
+    end_dt = datetime.strptime(end, "%Y-%m-%d %H:%M:%S")
+    
+    # 採用 NDJSON 格式進行串流
+    return StreamingResponse(
+        data_generator(names_list, start_dt, end_dt), 
+        media_type="application/x-ndjson"
+    )
 
 if __name__ == "__main__":
     # 預設啟動在 port 8000
