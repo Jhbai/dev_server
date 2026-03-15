@@ -136,7 +136,5 @@ python dev_server.py
 ```
 .
 ├── main.py          # 整合型主服務
-├── data_server.py   # 數據流圖表服務
-├── dev_server.py    # Web IDE 服務
 └── README.md        # 此文件
 ```
